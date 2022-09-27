@@ -7,7 +7,7 @@ Language-agnostic documentation can be found [here][docs].
 Typescript,
 
 ```
-yarn install kurtossis-sdk
+yarn install kurtosis-sdk
 ```
 
 Golang
