@@ -13,5 +13,8 @@ Golang
 go get github.com/kurtosis-tech/kurtosis-sdk/api/golang
 ```
 
-[core docs]: https://docs.kurtosistech.com/kurtosis/core-lib-documentation.html
-[engine docs]: https://docs.kurtosistech.com/kurtosis/engine-lib-documentation.html
+### Language Agnostic Docs
+
+[Core docs](https://docs.kurtosistech.com/kurtosis/core-lib-documentation.html)
+
+[Engine docs](https://docs.kurtosistech.com/kurtosis/engine-lib-documentation.html)
