@@ -104,6 +104,11 @@ export class ServiceConfig extends jspb.Message {
   getPrivateIpAddrPlaceholder(): string;
   setPrivateIpAddrPlaceholder(value: string): ServiceConfig;
 
+  getSubnetwork(): string;
+  setSubnetwork(value: string): ServiceConfig;
+  hasSubnetwork(): boolean;
+  clearSubnetwork(): ServiceConfig;
+
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): ServiceConfig.AsObject;
   static toObject(includeInstance: boolean, msg: ServiceConfig): ServiceConfig.AsObject;
@@ -124,6 +129,37 @@ export namespace ServiceConfig {
     cpuAllocationMillicpus: number,
     memoryAllocationMegabytes: number,
     privateIpAddrPlaceholder: string,
+    subnetwork?: string,
+  }
+
+  export enum SubnetworkCase { 
+    _SUBNETWORK_NOT_SET = 0,
+    SUBNETWORK = 11,
+  }
+}
+
+export class UpdateServiceConfig extends jspb.Message {
+  getSubnetwork(): string;
+  setSubnetwork(value: string): UpdateServiceConfig;
+  hasSubnetwork(): boolean;
+  clearSubnetwork(): UpdateServiceConfig;
+
+  serializeBinary(): Uint8Array;
+  toObject(includeInstance?: boolean): UpdateServiceConfig.AsObject;
+  static toObject(includeInstance: boolean, msg: UpdateServiceConfig): UpdateServiceConfig.AsObject;
+  static serializeBinaryToWriter(message: UpdateServiceConfig, writer: jspb.BinaryWriter): void;
+  static deserializeBinary(bytes: Uint8Array): UpdateServiceConfig;
+  static deserializeBinaryFromReader(message: UpdateServiceConfig, reader: jspb.BinaryReader): UpdateServiceConfig;
+}
+
+export namespace UpdateServiceConfig {
+  export type AsObject = {
+    subnetwork?: string,
+  }
+
+  export enum SubnetworkCase { 
+    _SUBNETWORK_NOT_SET = 0,
+    SUBNETWORK = 1,
   }
 }
 
@@ -747,9 +783,6 @@ export class StartServicesArgs extends jspb.Message {
   getServiceIdsToConfigsMap(): jspb.Map<string, ServiceConfig>;
   clearServiceIdsToConfigsMap(): StartServicesArgs;
 
-  getPartitionId(): string;
-  setPartitionId(value: string): StartServicesArgs;
-
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): StartServicesArgs.AsObject;
   static toObject(includeInstance: boolean, msg: StartServicesArgs): StartServicesArgs.AsObject;
@@ -761,7 +794,6 @@ export class StartServicesArgs extends jspb.Message {
 export namespace StartServicesArgs {
   export type AsObject = {
     serviceIdsToConfigsMap: Array<[string, ServiceConfig.AsObject]>,
-    partitionId: string,
   }
 }
 

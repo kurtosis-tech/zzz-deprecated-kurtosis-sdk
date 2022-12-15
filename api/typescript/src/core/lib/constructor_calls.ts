@@ -41,10 +41,13 @@ import TemplateAndData = RenderTemplatesToFilesArtifactArgs.TemplateAndData;
 // ==============================================================================================
 //                           Shared Objects (Used By Multiple Endpoints)
 // ==============================================================================================
-export function newPort(number: number, protocol: Port.TransportProtocol) {
+export function newPort(number: number, transportProtocol: Port.TransportProtocol, maybeApplicationProtocol?: string) {
     const result: Port = new Port();
     result.setNumber(number);
-    result.setTransportProtocol(protocol);
+    result.setTransportProtocol(transportProtocol);
+    if (maybeApplicationProtocol) {
+        result.setMaybeApplicationProtocol(maybeApplicationProtocol)
+    }
     return result;
 }
 
@@ -58,7 +61,8 @@ export function newServiceConfig(
     filesArtifactMountDirpaths : Map<string, string>,
     cpuAllocationMillicpus : number,
     memoryAllocationMegabytes : number,
-    privateIPAddrPlaceholder : string
+    privateIPAddrPlaceholder : string,
+    subnetwork : string,
 ) {
     const result : ServiceConfig = new ServiceConfig();
     result.setContainerImageName(containerImageName);
@@ -91,6 +95,7 @@ export function newServiceConfig(
     result.setCpuAllocationMillicpus(cpuAllocationMillicpus);
     result.setMemoryAllocationMegabytes(memoryAllocationMegabytes);
     result.setPrivateIpAddrPlaceholder(privateIPAddrPlaceholder);
+    result.setSubnetwork(subnetwork);
     return result;
 }
 
@@ -181,14 +186,12 @@ export function newModuleInfo(
 // ==============================================================================================
 //                                        Start Service
 // ==============================================================================================
-export function newStartServicesArgs(serviceConfigs : Map<ServiceID, ServiceConfig>, partitionID: string) : StartServicesArgs {
+export function newStartServicesArgs(serviceConfigs : Map<ServiceID, ServiceConfig>) : StartServicesArgs {
     const result : StartServicesArgs = new StartServicesArgs();
     const serviceIdsToConfigs : jspb.Map<string, ServiceConfig> = result.getServiceIdsToConfigsMap();
     for (const [serviceId, serviceConfig] of serviceConfigs) {
         serviceIdsToConfigs.set(String(serviceId), serviceConfig);
     }
-    result.setPartitionId(partitionID)
-
     return result;
 }
 
