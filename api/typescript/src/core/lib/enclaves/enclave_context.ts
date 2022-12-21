@@ -340,22 +340,6 @@ export class EnclaveContext {
         return ok(serviceCtx);
     }
 
-    // Docs available at https://docs.kurtosis.com/sdk/#addservicesmapserviceid-containerconfig-containerconfigs---mapserviceid-servicecontext-successfulservices-mapserviceid-error-failedservices
-    public async addServices(
-            containerConfigs : Map<ServiceID, ContainerConfig>
-        ): Promise<Result<[Map<ServiceID, ServiceContext>, Map<ServiceID, Error>], Error>> {
-
-        const resultAddServicesToPartition : Result<[Map<ServiceID, ServiceContext>, Map<ServiceID, Error>], Error> = await this.addServicesToPartition(
-            containerConfigs,
-            DEFAULT_PARTITION_ID,
-        );
-        if (resultAddServicesToPartition.isErr()) {
-            return err(resultAddServicesToPartition.error);
-        }
-
-        return ok(resultAddServicesToPartition.value);
-    }
-
     // Docs available at https://docs.kurtosis.com/sdk/#addservicetopartitionserviceid-serviceid-partitionid-partitionid-containerconfig-containerconfig---servicecontext-servicecontext
     public async addServiceToPartition(
             serviceId: ServiceID,
@@ -735,67 +719,6 @@ export class EnclaveContext {
         }
         const storeWebFilesArtifactResponse = storeWebFilesArtifactResponseResult.value;
         return ok(storeWebFilesArtifactResponse.getUuid())
-    }
-
-    // Docs available at https://docs.kurtosis.com/sdk/#storeservicefilesserviceid-serviceid-string-absolutefilepathonservicecontainer
-    public async storeServiceFiles(serviceId: ServiceID, absoluteFilepathOnServiceContainer: string): Promise<Result<FilesArtifactUUID, Error>> {
-        const args = newStoreFilesArtifactFromServiceArgs(serviceId, absoluteFilepathOnServiceContainer)
-        const storeFilesArtifactFromServiceResponseResult = await this.backend.storeFilesArtifactFromService(args)
-        if (storeFilesArtifactFromServiceResponseResult.isErr()) {
-            return err(storeFilesArtifactFromServiceResponseResult.error)
-        }
-        const storeFilesArtifactFromServiceResponse = storeFilesArtifactFromServiceResponseResult.value;
-        return ok(storeFilesArtifactFromServiceResponse.getUuid())
-    }
-
-    // Docs available at https://docs.kurtosis.com/sdk/#pauseserviceserviceid-serviceid
-    public async pauseService(serviceId: string): Promise<Result<null, Error>> {
-        const pauseServiceArgs: PauseServiceArgs = newPauseServiceArgs(serviceId)
-
-        const pauseServiceResult = await this.backend.pauseService(pauseServiceArgs)
-        if(pauseServiceResult.isErr()){
-            return err(pauseServiceResult.error)
-        }
-        const pauseServiceResponse = pauseServiceResult.value
-        return ok(null)
-    }
-
-    // Docs available at https://docs.kurtosis.com/sdk/#unpauseserviceserviceid-serviceid
-    public async unpauseService(serviceId: string): Promise<Result<null, Error>> {
-        const unpauseServiceArgs: UnpauseServiceArgs = newUnpauseServiceArgs(serviceId)
-
-        const unpauseServiceResult = await this.backend.unpauseService(unpauseServiceArgs)
-        if(unpauseServiceResult.isErr()){
-            return err(unpauseServiceResult.error)
-        }
-        const pauseServiceResponse = unpauseServiceResult.value
-        return ok(null)
-    }
-
-    // Docs available at https://docs.kurtosis.com/sdk/#rendertemplatesmapstring-templateanddata-templateanddatabydestinationrelfilepaths
-    public async renderTemplates(templateAndDataByDestinationRelFilepath: Map<string, TemplateAndData>): Promise<Result<FilesArtifactUUID, Error>> {
-
-        if (templateAndDataByDestinationRelFilepath.size === 0) {
-            return err(new Error("Expected at least one template got 0"))
-        }
-
-        let renderTemplatesToFilesArtifactArgs = newRenderTemplatesToFilesArtifactArgs()
-        let templateAndDataByRelDestinationFilepath = renderTemplatesToFilesArtifactArgs.getTemplatesAndDataByDestinationRelFilepathMap()
-
-        for(let [destinationRelFilepath, templateAndData] of templateAndDataByDestinationRelFilepath) {
-
-            const templateDataAsJsonString = JSON.stringify(templateAndData.templateData)
-            const templateAndDataAsJson = newTemplateAndData(templateAndData.template, templateDataAsJsonString)
-
-            templateAndDataByRelDestinationFilepath.set(destinationRelFilepath, templateAndDataAsJson)
-        }
-
-        const renderTemplatesToFilesArtifactResult = await this.backend.renderTemplatesToFilesArtifact(renderTemplatesToFilesArtifactArgs)
-        if (renderTemplatesToFilesArtifactResult.isErr()) {
-            return err(renderTemplatesToFilesArtifactResult.error)
-        }
-
-        return ok(renderTemplatesToFilesArtifactResult.value.getUuid())
     }
 
     // ====================================================================================================
