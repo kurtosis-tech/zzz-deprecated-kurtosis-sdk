@@ -56,109 +56,6 @@ func NewUpdateServiceConfig(subnetwork string) *kurtosis_core_rpc_api_bindings.U
 
 // ==============================================================================================
 //
-//	Load Module
-//
-// ==============================================================================================
-
-func NewLoadModuleArgs(moduleId string, containerImage string, serializedParams string) *kurtosis_core_rpc_api_bindings.LoadModuleArgs {
-	return &kurtosis_core_rpc_api_bindings.LoadModuleArgs{
-		ModuleId:         moduleId,
-		ContainerImage:   containerImage,
-		SerializedParams: serializedParams,
-	}
-}
-
-func NewLoadModuleResponse(
-	guid string,
-	privateIpAddr string,
-	privatePort *kurtosis_core_rpc_api_bindings.Port,
-	publicIpAddr string,
-	publicPort *kurtosis_core_rpc_api_bindings.Port,
-) *kurtosis_core_rpc_api_bindings.LoadModuleResponse {
-	return &kurtosis_core_rpc_api_bindings.LoadModuleResponse{
-		Guid:          guid,
-		PrivateIpAddr: privateIpAddr,
-		PrivatePort:   privatePort,
-		PublicIpAddr:  publicIpAddr,
-		PublicPort:    publicPort,
-	}
-}
-
-// ==============================================================================================
-//
-//	Unload Module
-//
-// ==============================================================================================
-
-func NewUnloadModuleArgs(moduleId string) *kurtosis_core_rpc_api_bindings.UnloadModuleArgs {
-	return &kurtosis_core_rpc_api_bindings.UnloadModuleArgs{
-		ModuleId: moduleId,
-	}
-}
-
-func NewUnloadModuleResponse(moduleGuid string) *kurtosis_core_rpc_api_bindings.UnloadModuleResponse {
-	return &kurtosis_core_rpc_api_bindings.UnloadModuleResponse{
-		ModuleGuid: moduleGuid,
-	}
-}
-
-// ==============================================================================================
-//
-//	Execute Module
-//
-// ==============================================================================================
-
-func NewExecuteModuleArgs(moduleId string, serializedParams string) *kurtosis_core_rpc_api_bindings.ExecuteModuleArgs {
-	return &kurtosis_core_rpc_api_bindings.ExecuteModuleArgs{
-		ModuleId:         moduleId,
-		SerializedParams: serializedParams,
-	}
-}
-
-func NewExecuteModuleResponse(serializedResult string) *kurtosis_core_rpc_api_bindings.ExecuteModuleResponse {
-	return &kurtosis_core_rpc_api_bindings.ExecuteModuleResponse{
-		SerializedResult: serializedResult,
-	}
-}
-
-// ==============================================================================================
-//
-//	Get Module Info
-//
-// ==============================================================================================
-
-func NewGetModulesArgs(moduleIds map[string]bool) *kurtosis_core_rpc_api_bindings.GetModulesArgs {
-	return &kurtosis_core_rpc_api_bindings.GetModulesArgs{
-		Ids: moduleIds,
-	}
-}
-
-func NewGetModulesResponse(
-	moduleInfoMap map[string]*kurtosis_core_rpc_api_bindings.ModuleInfo,
-) *kurtosis_core_rpc_api_bindings.GetModulesResponse {
-	return &kurtosis_core_rpc_api_bindings.GetModulesResponse{
-		ModuleInfo: moduleInfoMap,
-	}
-}
-
-func NewModuleInfo(
-	guid string,
-	privateIpAddr string,
-	privateGrpcPort *kurtosis_core_rpc_api_bindings.Port,
-	maybePublicIpAddr string,
-	maybePublicGrpcPort *kurtosis_core_rpc_api_bindings.Port,
-) *kurtosis_core_rpc_api_bindings.ModuleInfo {
-	return &kurtosis_core_rpc_api_bindings.ModuleInfo{
-		Guid:                guid,
-		PrivateIpAddr:       privateIpAddr,
-		PrivateGrpcPort:     privateGrpcPort,
-		MaybePublicIpAddr:   maybePublicIpAddr,
-		MaybePublicGrpcPort: maybePublicGrpcPort,
-	}
-}
-
-// ==============================================================================================
-//
 //	Execute Starlark Arguments
 //
 // ==============================================================================================
@@ -492,64 +389,12 @@ func NewExecCommandResponse(exitCode int32, logOutput string) *kurtosis_core_rpc
 
 // ==============================================================================================
 //
-//	Wait For Http Get Endpoint Availability
-//
-// ==============================================================================================
-
-func NewWaitForHttpGetEndpointAvailabilityArgs(
-	serviceId string,
-	port uint32,
-	path string,
-	initialDelayMilliseconds uint32,
-	retries uint32,
-	retriesDelayMilliseconds uint32,
-	bodyText string) *kurtosis_core_rpc_api_bindings.WaitForHttpGetEndpointAvailabilityArgs {
-	return &kurtosis_core_rpc_api_bindings.WaitForHttpGetEndpointAvailabilityArgs{
-		ServiceId:                serviceId,
-		Port:                     port,
-		Path:                     path,
-		InitialDelayMilliseconds: initialDelayMilliseconds,
-		Retries:                  retries,
-		RetriesDelayMilliseconds: retriesDelayMilliseconds,
-		BodyText:                 bodyText,
-	}
-}
-
-// ==============================================================================================
-//
-//	Wait For Http Post Endpoint Availability
-//
-// ==============================================================================================
-
-func NewWaitForHttpPostEndpointAvailabilityArgs(
-	serviceId string,
-	port uint32,
-	path string,
-	requestBody string,
-	initialDelayMilliseconds uint32,
-	retries uint32,
-	retriesDelayMilliseconds uint32,
-	bodyText string) *kurtosis_core_rpc_api_bindings.WaitForHttpPostEndpointAvailabilityArgs {
-	return &kurtosis_core_rpc_api_bindings.WaitForHttpPostEndpointAvailabilityArgs{
-		ServiceId:                serviceId,
-		Port:                     port,
-		Path:                     path,
-		RequestBody:              requestBody,
-		InitialDelayMilliseconds: initialDelayMilliseconds,
-		Retries:                  retries,
-		RetriesDelayMilliseconds: retriesDelayMilliseconds,
-		BodyText:                 bodyText,
-	}
-}
-
-// ==============================================================================================
-//
 //	Upload Files Artifact
 //
 // ==============================================================================================
 
-func NewUploadFilesArtifactArgs(data []byte) *kurtosis_core_rpc_api_bindings.UploadFilesArtifactArgs {
-	return &kurtosis_core_rpc_api_bindings.UploadFilesArtifactArgs{Data: data}
+func NewUploadFilesArtifactArgs(data []byte, name string) *kurtosis_core_rpc_api_bindings.UploadFilesArtifactArgs {
+	return &kurtosis_core_rpc_api_bindings.UploadFilesArtifactArgs{Data: data, Name: name}
 }
 
 // ==============================================================================================
@@ -558,18 +403,8 @@ func NewUploadFilesArtifactArgs(data []byte) *kurtosis_core_rpc_api_bindings.Upl
 //
 // ==============================================================================================
 
-func NewStoreWebFilesArtifactArgs(url string) *kurtosis_core_rpc_api_bindings.StoreWebFilesArtifactArgs {
-	return &kurtosis_core_rpc_api_bindings.StoreWebFilesArtifactArgs{Url: url}
-}
-
-// ==============================================================================================
-//
-//	Store Files Artifact From Service
-//
-// ==============================================================================================
-
-func NewStoreFilesArtifactFromServiceArgs(serviceId string, sourcePath string) *kurtosis_core_rpc_api_bindings.StoreFilesArtifactFromServiceArgs {
-	return &kurtosis_core_rpc_api_bindings.StoreFilesArtifactFromServiceArgs{ServiceId: serviceId, SourcePath: sourcePath}
+func NewStoreWebFilesArtifactArgs(url string, name string) *kurtosis_core_rpc_api_bindings.StoreWebFilesArtifactArgs {
+	return &kurtosis_core_rpc_api_bindings.StoreWebFilesArtifactArgs{Url: url, Name: name}
 }
 
 // ==============================================================================================
@@ -582,12 +417,6 @@ func NewTemplateAndData(template string, dataAsJson string) *kurtosis_core_rpc_a
 	return &kurtosis_core_rpc_api_bindings.RenderTemplatesToFilesArtifactArgs_TemplateAndData{
 		Template:   template,
 		DataAsJson: dataAsJson,
-	}
-}
-
-func NewRenderTemplatesToFilesArtifactArgs(templatesAndDataByDestinationRelFilepath map[string]*kurtosis_core_rpc_api_bindings.RenderTemplatesToFilesArtifactArgs_TemplateAndData) *kurtosis_core_rpc_api_bindings.RenderTemplatesToFilesArtifactArgs {
-	return &kurtosis_core_rpc_api_bindings.RenderTemplatesToFilesArtifactArgs{
-		TemplatesAndDataByDestinationRelFilepath: templatesAndDataByDestinationRelFilepath,
 	}
 }
 

@@ -3,60 +3,40 @@
  * All Rights Reserved.
  */
 
-import {ok, err, Result, Err} from "neverthrow";
+import {ok, err, Result} from "neverthrow";
 import log from "loglevel";
 import { isNode as  isExecutionEnvNode} from "browser-or-node";
 import * as jspb from "google-protobuf";
 import type {
-    PartitionConnectionInfo,
-    PartitionServices,
     Port,
     RemoveServiceArgs,
-    RepartitionArgs,
     ServiceConfig,
-    PartitionConnections,
     GetServicesArgs,
-    WaitForHttpGetEndpointAvailabilityArgs,
-    WaitForHttpPostEndpointAvailabilityArgs,
 } from "../../kurtosis_core_rpc_api_bindings/api_container_service_pb";
 import { GrpcNodeApiContainerClient } from "./grpc_node_api_container_client";
 import { GrpcWebApiContainerClient } from "./grpc_web_api_container_client";
 import type { GenericApiContainerClient } from "./generic_api_container_client";
 import {
     newGetServicesArgs,
-    newPartitionConnections,
-    newPartitionServices,
     newPort,
     newRemoveServiceArgs,
-    newRepartitionArgs,
     newServiceConfig,
     newStartServicesArgs,
     newStoreWebFilesArtifactArgs,
-    newStoreFilesArtifactFromServiceArgs,
-    newWaitForHttpGetEndpointAvailabilityArgs,
-    newWaitForHttpPostEndpointAvailabilityArgs,
     newUploadFilesArtifactArgs,
-    newPauseServiceArgs,
-    newUnpauseServiceArgs,
-    newTemplateAndData,
-    newRenderTemplatesToFilesArtifactArgs,
 } from "../constructor_calls";
 import type { ContainerConfig, FilesArtifactUUID } from "../services/container_config";
 import type { ServiceID, ServiceGUID } from "../services/service";
 import { ServiceContext } from "../services/service_context";
 import { TransportProtocol, PortSpec } from "../services/port_spec";
 import type { GenericPathJoiner } from "./generic_path_joiner";
-import type { PartitionConnection } from "./partition_connection";
 import {GenericTgzArchiver} from "./generic_tgz_archiver";
 import {
-    PauseServiceArgs,
     ServiceInfo,
-    UnpauseServiceArgs,
     StartServicesArgs,
     RunStarlarkScriptArgs,
     RunStarlarkPackageArgs,
 } from "../../kurtosis_core_rpc_api_bindings/api_container_service_pb";
-import {TemplateAndData} from "./template_and_data";
 import * as path from "path";
 import {parseKurtosisYaml} from "./kurtosis_yaml";
 import {Readable} from "stream";
@@ -480,111 +460,6 @@ export class EnclaveContext {
         return ok(serviceContext);
     }
 
-    // Docs available at https://docs.kurtosis.com/sdk/#repartitionnetworkmappartitionid-setserviceid-partitionservices-mappartitionid-mappartitionid-partitionconnection-partitionconnections-partitionconnection-defaultconnection
-    public async repartitionNetwork(
-            partitionServices: Map<PartitionID, Set<ServiceID>>,
-            partitionConnections: Map<PartitionID, Map<PartitionID, PartitionConnection>>,
-            defaultConnection: PartitionConnection
-        ): Promise<Result<null, Error>> {
-
-        if (partitionServices === null) {
-            return err(new Error("Partition services map cannot be null"));
-        }
-        if (defaultConnection === null) {
-            return err(new Error("Default connection cannot be null"));
-        }
-
-        // Cover for lazy/confused users
-        if (partitionConnections === null) {
-            partitionConnections = new Map();
-        }
-
-        const reqPartitionServices: Map<string, PartitionServices> = new Map();
-        for (const [partitionId, serviceIdSet] of partitionServices.entries()) {
-            const partitionIdStr: string = String(partitionId);
-            reqPartitionServices.set(partitionIdStr, newPartitionServices(serviceIdSet));
-        }
-
-        const reqPartitionConns: Map<string, PartitionConnections> = new Map();
-        for (const [partitionAId, partitionAConnsMap] of partitionConnections.entries()) {
-            const partitionAConnsStrMap: Map<string, PartitionConnectionInfo> = new Map();
-
-            for (const [partitionBId, conn] of partitionAConnsMap.entries()) {
-                const partitionBIdStr: string = String(partitionBId);
-                partitionAConnsStrMap.set(partitionBIdStr, conn.getPartitionConnectionInfo());
-            }
-
-            const partitionAConns: PartitionConnections = newPartitionConnections(partitionAConnsStrMap);
-            const partitionAIdStr: string = String(partitionAId);
-            reqPartitionConns.set(partitionAIdStr, partitionAConns);
-        }
-
-        const reqDefaultConnection = defaultConnection.getPartitionConnectionInfo()
-
-        const repartitionArgs: RepartitionArgs = newRepartitionArgs(reqPartitionServices, reqPartitionConns, reqDefaultConnection);
-
-        const repartitionNetworkResult = await this.backend.repartitionNetwork(repartitionArgs)
-        if(repartitionNetworkResult.isErr()){
-            return err(repartitionNetworkResult.error)
-        }
-
-        return ok(null)
-    }
-
-    // Docs available at https://docs.kurtosis.com/sdk/#waitforhttpgetendpointavailabilityserviceid-serviceid-uint32-port-string-path-string-requestbody-uint32-initialdelaymilliseconds-uint32-retries-uint32-retriesdelaymilliseconds-string-bodytext
-    public async waitForHttpGetEndpointAvailability(
-            serviceId: ServiceID,
-            port: number,
-            path: string,
-            initialDelayMilliseconds: number,
-            retries: number,
-            retriesDelayMilliseconds: number,
-            bodyText: string
-        ): Promise<Result<null, Error>> {
-
-        const availabilityArgs: WaitForHttpGetEndpointAvailabilityArgs = newWaitForHttpGetEndpointAvailabilityArgs(
-            serviceId,
-            port,
-            path,
-            initialDelayMilliseconds,
-            retries,
-            retriesDelayMilliseconds,
-            bodyText
-        );
-
-        const waitForHttpGetEndpointAvailabilityResult = await this.backend.waitForHttpGetEndpointAvailability(availabilityArgs)
-        if(waitForHttpGetEndpointAvailabilityResult.isErr()){
-            return err(waitForHttpGetEndpointAvailabilityResult.error)
-        }
-
-        const result = waitForHttpGetEndpointAvailabilityResult.value
-        return ok(result)
-    }
-
-    // Docs available at https://docs.kurtosis.com/sdk/#waitforhttppostendpointavailabilityserviceid-serviceid-uint32-port-string-path-string-requestbody-uint32-initialdelaymilliseconds-uint32-retries-uint32-retriesdelaymilliseconds-string-bodytext
-    public async waitForHttpPostEndpointAvailability(
-            serviceId: ServiceID,
-            port: number,
-            path: string,
-            requestBody: string,
-            initialDelayMilliseconds: number,
-            retries: number,
-            retriesDelayMilliseconds: number,
-            bodyText: string
-        ): Promise<Result<null, Error>> {
-        const availabilityArgs: WaitForHttpPostEndpointAvailabilityArgs = newWaitForHttpPostEndpointAvailabilityArgs(
-            serviceId,
-            port,
-            path,
-            requestBody,
-            initialDelayMilliseconds,
-            retries,
-            retriesDelayMilliseconds,
-            bodyText);
-
-        return this.backend.waitForHttpPostEndpointAvailability(availabilityArgs)
-    }
-
     // Docs available at https://docs.kurtosis.com/sdk/#getservices---mapserviceid--serviceguid-serviceids
     public async getServices(): Promise<Result<Map<ServiceID, ServiceGUID>, Error>> {
         const getAllServicesArgMap: Map<string, boolean> = new Map<string,boolean>()
@@ -604,14 +479,14 @@ export class EnclaveContext {
         return ok(serviceInfos)
     }
 
-    // Docs available at https://docs.kurtosis.com/sdk/#uploadfilesstring-pathtoupload
-    public async uploadFiles(pathToArchive: string): Promise<Result<FilesArtifactUUID, Error>>  {
+    // Docs available at https://docs.kurtosis.com/sdk#uploadfilesstring-pathtoupload-string-artifactname
+    public async uploadFiles(pathToArchive: string, name: string): Promise<Result<FilesArtifactUUID, Error>>  {
         const archiverResponse = await this.genericTgzArchiver.createTgzByteArray(pathToArchive)
         if (archiverResponse.isErr()){
             return err(archiverResponse.error)
         }
 
-        const args = newUploadFilesArtifactArgs(archiverResponse.value)
+        const args = newUploadFilesArtifactArgs(archiverResponse.value, name)
         const uploadResult = await this.backend.uploadFiles(args)
         if (uploadResult.isErr()){
             return err(uploadResult.error)
@@ -620,9 +495,9 @@ export class EnclaveContext {
         return ok(uploadResult.value.getUuid())
     }
 
-    // Docs available at https://docs.kurtosis.com/sdk/#storewebfilesstring-urltodownload
-    public async storeWebFiles(url: string): Promise<Result<FilesArtifactUUID, Error>> {
-        const args = newStoreWebFilesArtifactArgs(url);
+    // Docs available at https://docs.kurtosis.com/sdk#storewebfilesstring-urltodownload-string-artifactname
+    public async storeWebFiles(url: string, name: string): Promise<Result<FilesArtifactUUID, Error>> {
+        const args = newStoreWebFilesArtifactArgs(url, name);
         const storeWebFilesArtifactResponseResult = await this.backend.storeWebFilesArtifact(args)
         if (storeWebFilesArtifactResponseResult.isErr()) {
             return err(storeWebFilesArtifactResponseResult.error)

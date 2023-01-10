@@ -19,7 +19,6 @@ package enclaves
 
 import (
 	"context"
-	"errors"
 	"github.com/kurtosis-tech/kurtosis-sdk/api/golang/core/kurtosis_core_rpc_api_bindings"
 	"github.com/kurtosis-tech/kurtosis-sdk/api/golang/core/lib/binding_constructors"
 	"github.com/kurtosis-tech/kurtosis-sdk/api/golang/core/lib/services"
@@ -37,12 +36,7 @@ type EnclaveID string
 type PartitionID string
 
 const (
-	// This will always resolve to the default partition ID (regardless of whether such a partition exists in the enclave,
-	//  or it was repartitioned away)
-	defaultPartitionId PartitionID = ""
-
-	kurtosisYamlFilename = "kurtosis.yml"
-
+	kurtosisYamlFilename                      = "kurtosis.yml"
 	ensureCompressedFileIsLesserThanGRPCLimit = true
 )
 
@@ -152,177 +146,6 @@ func (enclaveCtx *EnclaveContext) RunStarlarkRemotePackageBlocking(ctx context.C
 	return ReadStarlarkRunResponseLineBlocking(starlarkRunResponseLineChan), nil
 }
 
-// Docs available at https://docs.kurtosis.com/sdk/#addserviceserviceid-serviceid--containerconfig-containerconfig---servicecontext-servicecontext
-func (enclaveCtx *EnclaveContext) AddService(
-	serviceID services.ServiceID,
-	containerConfig *services.ContainerConfig,
-) (*services.ServiceContext, error) {
-	containerConfigs := map[services.ServiceID]*services.ContainerConfig{}
-	containerConfigs[serviceID] = containerConfig
-	serviceContexts, failedServices, err := enclaveCtx.AddServicesToPartition(
-		containerConfigs,
-		defaultPartitionId,
-	)
-	if err != nil {
-		return nil, stacktrace.Propagate(err, "An error occurred adding service '%v' to the enclave in the default partition", serviceID)
-	}
-	serviceErr, found := failedServices[serviceID]
-	if found {
-		return nil, stacktrace.Propagate(serviceErr, "An error occurred adding service '%v' to the enclave in the default partition", serviceID)
-	}
-	serviceCtx, found := serviceContexts[serviceID]
-	if !found {
-		return nil, stacktrace.NewError("An error occurred retrieving the service context of service with ID '%v' from result of adding service to partition. This should not happen and is a bug in Kurtosis.", serviceID)
-	}
-	return serviceCtx, nil
-}
-
-// Docs available at https://docs.kurtosis.com/sdk/#addservicetopartitionserviceid-serviceid-partitionid-partitionid-containerconfig-containerconfig---servicecontext-servicecontext
-func (enclaveCtx *EnclaveContext) AddServiceToPartition(
-	serviceID services.ServiceID,
-	partitionID PartitionID,
-	containerConfig *services.ContainerConfig,
-) (*services.ServiceContext, error) {
-	containerConfigs := map[services.ServiceID]*services.ContainerConfig{}
-	containerConfigs[serviceID] = containerConfig
-	serviceContexts, failedServices, err := enclaveCtx.AddServicesToPartition(
-		containerConfigs,
-		partitionID,
-	)
-	if err != nil {
-		return nil, stacktrace.Propagate(err, "An error occurred adding service '%v' to the enclave in the default partition", serviceID)
-	}
-	serviceErr, found := failedServices[serviceID]
-	if found {
-		return nil, stacktrace.Propagate(serviceErr, "An error occurred adding service '%v' to the enclave in the default partition", serviceID)
-	}
-	serviceCtx, found := serviceContexts[serviceID]
-	if !found {
-		return nil, stacktrace.NewError("An error occurred retrieving the service context of service with ID '%v' from result of adding service to partition. This should not happen and is a bug in Kurtosis.", serviceID)
-	}
-	return serviceCtx, nil
-}
-
-// Docs available at https://docs.kurtosis.com/sdk/#addservicestopartitionmapserviceid-containerconfig-containerconfigs-partitionid-partitionid---mapserviceid-servicecontext-successfulservices-mapserviceid-error-failedservices
-func (enclaveCtx *EnclaveContext) AddServicesToPartition(
-	containerConfigs map[services.ServiceID]*services.ContainerConfig,
-	partitionID PartitionID,
-) (
-	resultSuccessfulServices map[services.ServiceID]*services.ServiceContext,
-	resultFailedServices map[services.ServiceID]error,
-	resultErr error,
-) {
-	ctx := context.Background()
-	failedServicesPool := map[services.ServiceID]error{}
-	partitionIDStr := string(partitionID)
-
-	serviceConfigs := map[string]*kurtosis_core_rpc_api_bindings.ServiceConfig{}
-	for serviceID, containerConfig := range containerConfigs {
-		logrus.Tracef("Creating files artifact ID str -> mount dirpaths map for service with Id '%v'...", serviceID)
-		artifactIdStrToMountDirpath := map[string]string{}
-		for mountDirpath, filesArtifactID := range containerConfig.GetFilesArtifactMountpoints() {
-			artifactIdStrToMountDirpath[mountDirpath] = string(filesArtifactID)
-		}
-		logrus.Tracef("Successfully created files artifact ID str -> mount dirpaths map for service with ID '%v'", serviceID)
-		privatePorts := containerConfig.GetUsedPorts()
-		privatePortsForApi := map[string]*kurtosis_core_rpc_api_bindings.Port{}
-
-		for portId, portSpec := range privatePorts {
-			privatePortsForApi[portId] = &kurtosis_core_rpc_api_bindings.Port{
-				Number:                   uint32(portSpec.GetNumber()),
-				TransportProtocol:        kurtosis_core_rpc_api_bindings.Port_TransportProtocol(portSpec.GetTransportProtocol()),
-				MaybeApplicationProtocol: portSpec.GetMaybeApplicationProtocol(),
-			}
-		}
-		//TODO this is a huge hack to temporarily enable static ports for NEAR until we have a more productized solution
-		publicPorts := containerConfig.GetPublicPorts()
-		publicPortsForApi := map[string]*kurtosis_core_rpc_api_bindings.Port{}
-		for portId, portSpec := range publicPorts {
-			publicPortsForApi[portId] = &kurtosis_core_rpc_api_bindings.Port{
-				Number:                   uint32(portSpec.GetNumber()),
-				TransportProtocol:        kurtosis_core_rpc_api_bindings.Port_TransportProtocol(portSpec.GetTransportProtocol()),
-				MaybeApplicationProtocol: portSpec.GetMaybeApplicationProtocol(),
-			}
-		}
-		//TODO finish the hack
-
-		serviceIDStr := string(serviceID)
-		serviceConfigs[serviceIDStr] = binding_constructors.NewServiceConfig(
-			containerConfig.GetImage(),
-			privatePortsForApi,
-			publicPortsForApi,
-			containerConfig.GetEntrypointOverrideArgs(),
-			containerConfig.GetCmdOverrideArgs(),
-			containerConfig.GetEnvironmentVariableOverrides(),
-			artifactIdStrToMountDirpath,
-			containerConfig.GetCPUAllocationMillicpus(),
-			containerConfig.GetMemoryAllocationMegabytes(),
-			containerConfig.GetPrivateIPAddrPlaceholder(),
-			partitionIDStr)
-	}
-
-	startServicesArgs := binding_constructors.NewStartServicesArgs(serviceConfigs)
-
-	logrus.Trace("Starting new services with Kurtosis API...")
-	startServicesResp, err := enclaveCtx.client.StartServices(ctx, startServicesArgs)
-	if err != nil {
-		return nil, nil, stacktrace.Propagate(err, "An error occurred starting services with the Kurtosis API")
-	}
-	// defer-undo removes all successfully started services in case of errors in the future phases
-	shouldRemoveServices := map[services.ServiceID]bool{}
-	for serviceIDStr := range startServicesResp.GetSuccessfulServiceIdsToServiceInfo() {
-		shouldRemoveServices[services.ServiceID(serviceIDStr)] = true
-	}
-	defer func() {
-		for serviceID := range shouldRemoveServices {
-			removeServiceArgs := binding_constructors.NewRemoveServiceArgs(string(serviceID))
-			_, err = enclaveCtx.client.RemoveService(context.Background(), removeServiceArgs)
-			if err != nil {
-				logrus.Errorf("Attempted to remove service '%v' to delete its resources after it failed to start, but an error occurred "+
-					"while attempting to remove the service:\n'%v'", serviceID, err)
-			}
-		}
-	}()
-
-	for serviceIDStr, errStr := range startServicesResp.GetFailedServiceIdsToError() {
-		serviceID := services.ServiceID(serviceIDStr)
-		failedServicesPool[serviceID] = stacktrace.Propagate(errors.New(errStr), "The following error occurred when trying to start service '%v'", serviceID)
-	}
-
-	successfulServices := map[services.ServiceID]*services.ServiceContext{}
-	for serviceIDStr, serviceInfo := range startServicesResp.GetSuccessfulServiceIdsToServiceInfo() {
-		serviceID := services.ServiceID(serviceIDStr)
-
-		serviceCtxPrivatePorts, err := convertApiPortsToServiceContextPorts(serviceInfo.GetPrivatePorts())
-		if err != nil {
-			failedServicesPool[serviceID] = stacktrace.Propagate(err, "An error occurred converting the private ports returned by the API to ports usable by the service context.")
-			continue
-		}
-		serviceCtxPublicPorts, err := convertApiPortsToServiceContextPorts(serviceInfo.GetMaybePublicPorts())
-		if err != nil {
-			failedServicesPool[serviceID] = stacktrace.Propagate(err, "An error occurred converting the public ports returned by the API to ports usable by the service context.")
-			continue
-		}
-
-		serviceContext := services.NewServiceContext(
-			enclaveCtx.client,
-			serviceID,
-			services.ServiceGUID(serviceInfo.GetServiceGuid()),
-			serviceInfo.GetPrivateIpAddr(),
-			serviceCtxPrivatePorts,
-			serviceInfo.GetMaybePublicIpAddr(),
-			serviceCtxPublicPorts,
-		)
-		successfulServices[serviceID] = serviceContext
-	}
-
-	// Do not remove resources for successful services
-	for serviceID := range successfulServices {
-		delete(shouldRemoveServices, serviceID)
-	}
-	return successfulServices, failedServicesPool, nil
-}
-
 // Docs available at https://docs.kurtosis.com/sdk/#getservicecontextserviceid-serviceid---servicecontext-servicecontext
 func (enclaveCtx *EnclaveContext) GetServiceContext(serviceId services.ServiceID) (*services.ServiceContext, error) {
 	serviceIdMapForArgs := map[string]bool{string(serviceId): true}
@@ -366,111 +189,6 @@ func (enclaveCtx *EnclaveContext) GetServiceContext(serviceId services.ServiceID
 	return serviceContext, nil
 }
 
-// Docs available at https://docs.kurtosis.com/sdk/#repartitionnetworkmappartitionid-setserviceid-partitionservices-mappartitionid-mappartitionid-partitionconnection-partitionconnections-partitionconnection-defaultconnection
-func (enclaveCtx *EnclaveContext) RepartitionNetwork(
-	partitionServices map[PartitionID]map[services.ServiceID]bool,
-	partitionConnections map[PartitionID]map[PartitionID]PartitionConnection,
-	defaultConnection PartitionConnection) error {
-
-	if partitionServices == nil {
-		return stacktrace.NewError("Partition services map cannot be nil")
-	}
-	if defaultConnection == nil {
-		return stacktrace.NewError("Default connection cannot be nil")
-	}
-
-	// Cover for lazy/confused users
-	if partitionConnections == nil {
-		partitionConnections = map[PartitionID]map[PartitionID]PartitionConnection{}
-	}
-
-	reqPartitionServices := map[string]*kurtosis_core_rpc_api_bindings.PartitionServices{}
-	for partitionId, serviceIdSet := range partitionServices {
-		serviceIdStrPseudoSet := map[string]bool{}
-		for serviceId := range serviceIdSet {
-			serviceIdStr := string(serviceId)
-			serviceIdStrPseudoSet[serviceIdStr] = true
-		}
-		partitionIdStr := string(partitionId)
-		reqPartitionServices[partitionIdStr] = binding_constructors.NewPartitionServices(serviceIdStrPseudoSet)
-	}
-
-	reqPartitionConns := map[string]*kurtosis_core_rpc_api_bindings.PartitionConnections{}
-	for partitionAId, partitionAConnsMap := range partitionConnections {
-		partitionAConnsStrMap := map[string]*kurtosis_core_rpc_api_bindings.PartitionConnectionInfo{}
-		for partitionBId, conn := range partitionAConnsMap {
-			partitionBIdStr := string(partitionBId)
-			partitionAConnsStrMap[partitionBIdStr] = conn.getPartitionConnectionInfo()
-		}
-		partitionAConns := binding_constructors.NewPartitionConnections(partitionAConnsStrMap)
-		partitionAIdStr := string(partitionAId)
-		reqPartitionConns[partitionAIdStr] = partitionAConns
-	}
-
-	reqDefaultConnection := defaultConnection.getPartitionConnectionInfo()
-
-	repartitionArgs := binding_constructors.NewRepartitionArgs(reqPartitionServices, reqPartitionConns, reqDefaultConnection)
-	if _, err := enclaveCtx.client.Repartition(context.Background(), repartitionArgs); err != nil {
-		return stacktrace.Propagate(err, "An error occurred repartitioning the enclave")
-	}
-	return nil
-}
-
-// Docs available at https://docs.kurtosis.com/sdk/#waitforhttpgetendpointavailabilityserviceid-serviceid-uint32-port-string-path-string-requestbody-uint32-initialdelaymilliseconds-uint32-retries-uint32-retriesdelaymilliseconds-string-bodytext
-func (enclaveCtx *EnclaveContext) WaitForHttpGetEndpointAvailability(serviceId services.ServiceID, port uint32, path string, initialDelayMilliseconds uint32, retries uint32, retriesDelayMilliseconds uint32, bodyText string) error {
-
-	availabilityArgs := binding_constructors.NewWaitForHttpGetEndpointAvailabilityArgs(
-		string(serviceId),
-		port,
-		path,
-		initialDelayMilliseconds,
-		retries,
-		retriesDelayMilliseconds,
-		bodyText,
-	)
-
-	if _, err := enclaveCtx.client.WaitForHttpGetEndpointAvailability(context.Background(), availabilityArgs); err != nil {
-		return stacktrace.Propagate(
-			err,
-			"Endpoint '%v' on port '%v' for service '%v' did not become available despite polling %v times with %v between polls",
-			path,
-			port,
-			serviceId,
-			retries,
-			retriesDelayMilliseconds,
-		)
-	}
-	return nil
-}
-
-// Docs available at https://docs.kurtosis.com/sdk/#waitforhttppostendpointavailabilityserviceid-serviceid-uint32-port-string-path-string-requestbody-uint32-initialdelaymilliseconds-uint32-retries-uint32-retriesdelaymilliseconds-string-bodytext
-func (enclaveCtx *EnclaveContext) WaitForHttpPostEndpointAvailability(serviceId services.ServiceID, port uint32, path string, requestBody string, initialDelayMilliseconds uint32, retries uint32, retriesDelayMilliseconds uint32, bodyText string) error {
-
-	availabilityArgs := binding_constructors.NewWaitForHttpPostEndpointAvailabilityArgs(
-		string(serviceId),
-		port,
-		path,
-		requestBody,
-		initialDelayMilliseconds,
-		retries,
-		retriesDelayMilliseconds,
-		bodyText,
-	)
-
-	if _, err := enclaveCtx.client.WaitForHttpPostEndpointAvailability(context.Background(), availabilityArgs); err != nil {
-		return stacktrace.Propagate(
-			err,
-			"Endpoint '%v' on port '%v' for service '%v' did not become available despite polling %v times with %v between polls",
-			path,
-			port,
-			serviceId,
-			retries,
-			retriesDelayMilliseconds,
-		)
-	}
-	return nil
-}
-
 // Docs available at https://docs.kurtosis.com/sdk/#getservices---mapserviceid--serviceguid-serviceids
 func (enclaveCtx *EnclaveContext) GetServices() (map[services.ServiceID]services.ServiceGUID, error) {
 	getServicesArgs := binding_constructors.NewGetServicesArgs(map[string]bool{})
@@ -488,8 +206,8 @@ func (enclaveCtx *EnclaveContext) GetServices() (map[services.ServiceID]services
 	return serviceInfos, nil
 }
 
-// Docs available at https://docs.kurtosis.com/sdk/#uploadfilesstring-pathtoupload
-func (enclaveCtx *EnclaveContext) UploadFiles(pathToUpload string) (services.FilesArtifactUUID, error) {
+// Docs available at https://docs.kurtosis.com/sdk#uploadfilesstring-pathtoupload-string-artifactname
+func (enclaveCtx *EnclaveContext) UploadFiles(pathToUpload string, artifactName string) (services.FilesArtifactUUID, error) {
 	content, err := shared_utils.CompressPath(pathToUpload, ensureCompressedFileIsLesserThanGRPCLimit)
 	if err != nil {
 		return "", stacktrace.Propagate(err,
@@ -497,7 +215,7 @@ func (enclaveCtx *EnclaveContext) UploadFiles(pathToUpload string) (services.Fil
 			pathToUpload)
 	}
 
-	args := binding_constructors.NewUploadFilesArtifactArgs(content)
+	args := binding_constructors.NewUploadFilesArtifactArgs(content, artifactName)
 	response, err := enclaveCtx.client.UploadFilesArtifact(context.Background(), args)
 	if err != nil {
 		return "", stacktrace.Propagate(err, "An error was encountered while uploading data to the API Container.")
@@ -505,9 +223,9 @@ func (enclaveCtx *EnclaveContext) UploadFiles(pathToUpload string) (services.Fil
 	return services.FilesArtifactUUID(response.Uuid), nil
 }
 
-// Docs available at https://docs.kurtosis.com/sdk/#storewebfilesstring-urltodownload
-func (enclaveCtx *EnclaveContext) StoreWebFiles(ctx context.Context, urlToStoreWeb string) (services.FilesArtifactUUID, error) {
-	args := binding_constructors.NewStoreWebFilesArtifactArgs(urlToStoreWeb)
+// Docs available at https://docs.kurtosis.com/sdk#storewebfilesstring-urltodownload-string-artifactname
+func (enclaveCtx *EnclaveContext) StoreWebFiles(ctx context.Context, urlToStoreWeb string, artifactName string) (services.FilesArtifactUUID, error) {
+	args := binding_constructors.NewStoreWebFilesArtifactArgs(urlToStoreWeb, artifactName)
 	response, err := enclaveCtx.client.StoreWebFilesArtifact(ctx, args)
 	if err != nil {
 		return "", stacktrace.Propagate(err, "An error occurred downloading files artifact from URL '%v'", urlToStoreWeb)
