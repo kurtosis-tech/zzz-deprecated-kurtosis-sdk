@@ -26,12 +26,12 @@ import (
 	"github.com/kurtosis-tech/stacktrace"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"io"
-	"math"
 	"path"
 )
 
-type EnclaveID string
+type EnclaveUUID string
 
 type PartitionID string
 
@@ -44,7 +44,8 @@ const (
 type EnclaveContext struct {
 	client kurtosis_core_rpc_api_bindings.ApiContainerServiceClient
 
-	enclaveId EnclaveID
+	enclaveUuid EnclaveUUID
+	enclaveName string
 }
 
 /*
@@ -54,17 +55,24 @@ Creates a new EnclaveContext object with the given parameters.
 //  Typescript does it, so that the user doesn't have to figure out how to instantiate the ApiContainerServiceClient on their own!
 func NewEnclaveContext(
 	client kurtosis_core_rpc_api_bindings.ApiContainerServiceClient,
-	enclaveId EnclaveID,
+	enclaveUuid EnclaveUUID,
+	enclaveName string,
 ) *EnclaveContext {
 	return &EnclaveContext{
-		client:    client,
-		enclaveId: enclaveId,
+		client:      client,
+		enclaveUuid: enclaveUuid,
+		enclaveName: enclaveName,
 	}
 }
 
-// Docs available at https://docs.kurtosis.com/sdk/#getenclaveid---enclaveid
-func (enclaveCtx *EnclaveContext) GetEnclaveID() EnclaveID {
-	return enclaveCtx.enclaveId
+// Docs available at https://docs.kurtosis.com/sdk/#getenclaveuuid---enclaveuuid
+func (enclaveCtx *EnclaveContext) GetEnclaveUuid() EnclaveUUID {
+	return enclaveCtx.enclaveUuid
+}
+
+// Docs available at https://docs.kurtosis.com/sdk/#getenclavename---string
+func (enclaveCtx *EnclaveContext) GetEnclaveName() string {
+	return enclaveCtx.enclaveName
 }
 
 // Docs available at https://docs.kurtosis.com/sdk/#runstarlarkscriptstring-serializedstarlarkscript-boolean-dryrun---streamstarlarkrunresponseline-responselines-error-error
@@ -146,25 +154,25 @@ func (enclaveCtx *EnclaveContext) RunStarlarkRemotePackageBlocking(ctx context.C
 	return ReadStarlarkRunResponseLineBlocking(starlarkRunResponseLineChan), nil
 }
 
-// Docs available at https://docs.kurtosis.com/sdk/#getservicecontextserviceid-serviceid---servicecontext-servicecontext
-func (enclaveCtx *EnclaveContext) GetServiceContext(serviceId services.ServiceID) (*services.ServiceContext, error) {
-	serviceIdMapForArgs := map[string]bool{string(serviceId): true}
-	getServiceInfoArgs := binding_constructors.NewGetServicesArgs(serviceIdMapForArgs)
+// Docs available at https://docs.kurtosis.com/sdk#getservicecontextstring-serviceidentifier---servicecontext-servicecontext
+func (enclaveCtx *EnclaveContext) GetServiceContext(serviceIdentifier string) (*services.ServiceContext, error) {
+	serviceIdentifierMapForArgs := map[string]bool{serviceIdentifier: true}
+	getServiceInfoArgs := binding_constructors.NewGetServicesArgs(serviceIdentifierMapForArgs)
 	response, err := enclaveCtx.client.GetServices(context.Background(), getServiceInfoArgs)
 	if err != nil {
 		return nil, stacktrace.Propagate(
 			err,
 			"An error occurred when trying to get info for service '%v'",
-			serviceId)
+			serviceIdentifier)
 	}
-	serviceInfo, found := response.GetServiceInfo()[string(serviceId)]
+	serviceInfo, found := response.GetServiceInfo()[serviceIdentifier]
 	if !found {
-		return nil, stacktrace.NewError("Failed to retrieve service information for service '%v'", string(serviceId))
+		return nil, stacktrace.NewError("Failed to retrieve service information for service '%v'", serviceIdentifier)
 	}
 	if serviceInfo.GetPrivateIpAddr() == "" {
 		return nil, stacktrace.NewError(
 			"Kurtosis API reported an empty private IP address for service '%v' - this should never happen, and is a bug with Kurtosis!",
-			serviceId)
+			serviceIdentifier)
 	}
 
 	serviceCtxPrivatePorts, err := convertApiPortsToServiceContextPorts(serviceInfo.GetPrivatePorts())
@@ -178,8 +186,8 @@ func (enclaveCtx *EnclaveContext) GetServiceContext(serviceId services.ServiceID
 
 	serviceContext := services.NewServiceContext(
 		enclaveCtx.client,
-		serviceId,
-		services.ServiceGUID(serviceInfo.ServiceGuid),
+		services.ServiceName(serviceIdentifier),
+		services.ServiceUUID(serviceInfo.ServiceUuid),
 		serviceInfo.GetPrivateIpAddr(),
 		serviceCtxPrivatePorts,
 		serviceInfo.GetMaybePublicIpAddr(),
@@ -189,19 +197,19 @@ func (enclaveCtx *EnclaveContext) GetServiceContext(serviceId services.ServiceID
 	return serviceContext, nil
 }
 
-// Docs available at https://docs.kurtosis.com/sdk/#getservices---mapserviceid--serviceguid-serviceids
-func (enclaveCtx *EnclaveContext) GetServices() (map[services.ServiceID]services.ServiceGUID, error) {
+// Docs available at https://docs.kurtosis.com/sdk#getservices---mapservicename--serviceuuid-serviceidentifiers
+func (enclaveCtx *EnclaveContext) GetServices() (map[services.ServiceName]services.ServiceUUID, error) {
 	getServicesArgs := binding_constructors.NewGetServicesArgs(map[string]bool{})
 	response, err := enclaveCtx.client.GetServices(context.Background(), getServicesArgs)
 	if err != nil {
-		return nil, stacktrace.Propagate(err, "An error occurred getting the service IDs in the enclave")
+		return nil, stacktrace.Propagate(err, "An error occurred getting the service Names in the enclave")
 	}
 
-	serviceInfos := make(map[services.ServiceID]services.ServiceGUID, len(response.GetServiceInfo()))
+	serviceInfos := make(map[services.ServiceName]services.ServiceUUID, len(response.GetServiceInfo()))
 	for serviceIdStr, responseServiceInfo := range response.GetServiceInfo() {
-		serviceId := services.ServiceID(serviceIdStr)
-		serviceGuid := services.ServiceGUID(responseServiceInfo.GetServiceGuid())
-		serviceInfos[serviceId] = serviceGuid
+		serviceName := services.ServiceName(serviceIdStr)
+		serviceUuid := services.ServiceUUID(responseServiceInfo.GetServiceUuid())
+		serviceInfos[serviceName] = serviceUuid
 	}
 	return serviceInfos, nil
 }
@@ -243,11 +251,26 @@ func (enclaveCtx *EnclaveContext) DownloadFilesArtifact(ctx context.Context, art
 	return response.Data, nil
 }
 
+// Docs available at https://docs.kurtosis.com/sdk#getexistingandhistoricalserviceidentifiers---serviceidentifiers-serviceidentifiers
+func (enclaveCtx *EnclaveContext) GetExistingAndHistoricalServiceIdentifiers(ctx context.Context) (*services.ServiceIdentifiers, error) {
+	response, err := enclaveCtx.client.GetExistingAndHistoricalServiceIdentifiers(ctx, &emptypb.Empty{})
+	if err != nil {
+		return nil, stacktrace.Propagate(err, "An error occurred while fetching existing and historical identifiers")
+	}
+	return services.NewServiceIdentifiers(enclaveCtx.enclaveName, response.AllIdentifiers), nil
+}
+
 // ====================================================================================================
 //
 //	Private helper methods
 //
 // ====================================================================================================
+
+// convertApiPortsToServiceContextPorts returns a converted map where Port objects associated with strings in [apiPorts] are
+// properly converted to PortSpec objects.
+// Returns error if:
+// - Any protocol associated with a port in [apiPorts] is invalid (eg. not currently supported).
+// - Any port number associated with a port [apiPorts] is higher than the max port number.
 func convertApiPortsToServiceContextPorts(apiPorts map[string]*kurtosis_core_rpc_api_bindings.Port) (map[string]*services.PortSpec, error) {
 	result := map[string]*services.PortSpec{}
 	for portId, apiPortSpec := range apiPorts {
@@ -257,14 +280,13 @@ func convertApiPortsToServiceContextPorts(apiPorts map[string]*kurtosis_core_rpc
 			return nil, stacktrace.NewError("Received unrecognized protocol '%v' from the API", apiTransportProtocol)
 		}
 		portNumUint32 := apiPortSpec.GetNumber()
-		if portNumUint32 > math.MaxUint16 {
+		if portNumUint32 > services.MaxPortNum {
 			return nil, stacktrace.NewError(
-				"Received port num '%v' from the API which is higher than the max uint16 value '%v'; this is VERY weird because ports should be 16-bit numbers",
+				"Received port number '%v' from the API which is higher than the max allowed port number '%v'",
 				portNumUint32,
-				math.MaxUint16,
+				services.MaxPortNum,
 			)
 		}
-
 		portNumUint16 := uint16(portNumUint32)
 		apiMaybeApplicationProtocol := apiPortSpec.GetMaybeApplicationProtocol()
 		result[portId] = services.NewPortSpec(

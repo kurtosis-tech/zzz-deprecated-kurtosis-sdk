@@ -32,6 +32,8 @@ const (
 	serviceLogsStreamContentChanBufferSize = 5
 
 	grpcStreamCancelContextErrorMessage = "rpc error: code = Canceled desc = context canceled"
+
+	validUuidMatchesAllowed = 1
 )
 
 var apiContainerLogLevel = logrus.DebugLevel
@@ -72,12 +74,12 @@ func NewKurtosisContextFromLocalEngine() (*KurtosisContext, error) {
 // Docs available at https://docs.kurtosis.com/sdk#createenclaveenclaveid-enclaveid-boolean-ispartitioningenabled---enclavecontextenclavecontext-enclavecontext
 func (kurtosisCtx *KurtosisContext) CreateEnclave(
 	ctx context.Context,
-	enclaveId enclaves.EnclaveID,
+	enclaveName string,
 	isPartitioningEnabled bool,
 ) (*enclaves.EnclaveContext, error) {
 
 	createEnclaveArgs := &kurtosis_engine_rpc_api_bindings.CreateEnclaveArgs{
-		EnclaveId:              string(enclaveId),
+		EnclaveName:            enclaveName,
 		ApiContainerVersionTag: defaultApiContainerVersionTag,
 		ApiContainerLogLevel:   apiContainerLogLevel.String(),
 		IsPartitioningEnabled:  isPartitioningEnabled,
@@ -85,7 +87,7 @@ func (kurtosisCtx *KurtosisContext) CreateEnclave(
 
 	response, err := kurtosisCtx.client.CreateEnclave(ctx, createEnclaveArgs)
 	if err != nil {
-		return nil, stacktrace.Propagate(err, "An error occurred creating an enclave with ID '%v'", enclaveId)
+		return nil, stacktrace.Propagate(err, "An error occurred creating an enclave with name '%v'", enclaveName)
 	}
 
 	enclaveContext, err := newEnclaveContextFromEnclaveInfo(response.EnclaveInfo)
@@ -96,20 +98,11 @@ func (kurtosisCtx *KurtosisContext) CreateEnclave(
 	return enclaveContext, nil
 }
 
-// Docs available at https://docs.kurtosis.com/sdk#getenclavecontextenclaveid-enclaveid---enclavecontextenclavecontext-enclavecontext
-func (kurtosisCtx *KurtosisContext) GetEnclaveContext(ctx context.Context, enclaveId enclaves.EnclaveID) (*enclaves.EnclaveContext, error) {
-	response, err := kurtosisCtx.client.GetEnclaves(ctx, &emptypb.Empty{})
+// Docs available at https://docs.kurtosis.com/sdk/#getenclavecontextstring-enclaveidentifier---enclavecontextenclavecontext-enclavecontext
+func (kurtosisCtx *KurtosisContext) GetEnclaveContext(ctx context.Context, enclaveIdentifier string) (*enclaves.EnclaveContext, error) {
+	enclaveInfo, err := kurtosisCtx.GetEnclave(ctx, enclaveIdentifier)
 	if err != nil {
-		return nil, stacktrace.Propagate(
-			err,
-			"An error occurred getting enclaves",
-		)
-	}
-
-	allEnclaveInfo := response.EnclaveInfo
-	enclaveInfo, found := allEnclaveInfo[string(enclaveId)]
-	if !found {
-		return nil, stacktrace.Propagate(err, "No enclave with ID '%v' found", enclaveId)
+		return nil, stacktrace.Propagate(err, "An error occurred while getting enclave with identifier '%v'", enclaveIdentifier)
 	}
 
 	enclaveCtx, err := newEnclaveContextFromEnclaveInfo(enclaveInfo)
@@ -120,8 +113,8 @@ func (kurtosisCtx *KurtosisContext) GetEnclaveContext(ctx context.Context, encla
 	return enclaveCtx, nil
 }
 
-// Docs available at https://docs.kurtosis.com/sdk#getenclaves---setenclaveid-enclaveids
-func (kurtosisCtx *KurtosisContext) GetEnclaves(ctx context.Context) (map[enclaves.EnclaveID]bool, error) {
+// Docs available at https://docs.kurtosis.com/sdk#getenclaves---enclaves-enclaves
+func (kurtosisCtx *KurtosisContext) GetEnclaves(ctx context.Context) (*Enclaves, error) {
 	response, err := kurtosisCtx.client.GetEnclaves(ctx, &emptypb.Empty{})
 	if err != nil {
 		return nil, stacktrace.Propagate(
@@ -130,35 +123,77 @@ func (kurtosisCtx *KurtosisContext) GetEnclaves(ctx context.Context) (map[enclav
 		)
 	}
 
-	result := map[enclaves.EnclaveID]bool{}
-	for enclaveId := range response.EnclaveInfo {
-		result[enclaves.EnclaveID(enclaveId)] = true
+	enclavesByUuid := map[string]*kurtosis_engine_rpc_api_bindings.EnclaveInfo{}
+	enclavesByName := map[string][]*kurtosis_engine_rpc_api_bindings.EnclaveInfo{}
+	enclavesByShortenedUuid := map[string][]*kurtosis_engine_rpc_api_bindings.EnclaveInfo{}
+	for enclaveUuid, enclaveInfo := range response.EnclaveInfo {
+		enclavesByUuid[enclaveUuid] = response.EnclaveInfo[enclaveUuid]
+		enclavesByName[enclaveInfo.Name] = append(enclavesByShortenedUuid[enclaveInfo.GetName()], response.EnclaveInfo[enclaveUuid])
+		enclavesByShortenedUuid[enclaveInfo.ShortenedUuid] = append(enclavesByShortenedUuid[enclaveInfo.ShortenedUuid], response.EnclaveInfo[enclaveUuid])
 	}
 
-	return result, nil
+	return &Enclaves{
+		enclavesByUuid:          enclavesByUuid,
+		enclavesByName:          enclavesByName,
+		enclavesByShortenedUuid: enclavesByShortenedUuid,
+	}, nil
 }
 
-// Docs available at https://docs.kurtosis.com/sdk#stopenclaveenclaveid-enclaveid
-func (kurtosisCtx *KurtosisContext) StopEnclave(ctx context.Context, enclaveId enclaves.EnclaveID) error {
+// Docs available at https://docs.kurtosis.com/sdk/#getenclavestring-enclaveidentifier---enclaveinfo-enclaveinfo
+func (kurtosisCtx *KurtosisContext) GetEnclave(ctx context.Context, enclaveIdentifier string) (*kurtosis_engine_rpc_api_bindings.EnclaveInfo, error) {
+	enclaves, err := kurtosisCtx.GetEnclaves(ctx)
+	if err != nil {
+		return nil, stacktrace.Propagate(
+			err,
+			"An error occurred getting enclave for identifier '%v'",
+			enclaveIdentifier,
+		)
+	}
+
+	if enclaveInfo, found := enclaves.enclavesByUuid[enclaveIdentifier]; found {
+		return enclaveInfo, nil
+	}
+
+	if enclaveInfos, found := enclaves.enclavesByShortenedUuid[enclaveIdentifier]; found {
+		if len(enclaveInfos) == validUuidMatchesAllowed {
+			return enclaveInfos[0], nil
+		} else if len(enclaveInfos) > validUuidMatchesAllowed {
+			return nil, stacktrace.NewError("Found multiple enclaves '%v' matching shortened uuid '%v'. Please use a uuid to be more specific", enclaveInfos, enclaveIdentifier)
+		}
+	}
+
+	if enclaveInfos, found := enclaves.enclavesByName[enclaveIdentifier]; found {
+		if len(enclaveInfos) == validUuidMatchesAllowed {
+			return enclaveInfos[0], nil
+		} else if len(enclaveInfos) > validUuidMatchesAllowed {
+			return nil, stacktrace.NewError("Found multiple enclaves '%v' matching name '%v'. Please use a uuid to be more specific", enclaveInfos, enclaveIdentifier)
+		}
+	}
+
+	return nil, stacktrace.NewError("Couldn't find an enclave for identifier '%v'", enclaveIdentifier)
+}
+
+// Docs available at https://docs.kurtosis.com/sdk/#stopenclavestring-enclaveidentifier
+func (kurtosisCtx *KurtosisContext) StopEnclave(ctx context.Context, enclaveIdentifier string) error {
 	stopEnclaveArgs := &kurtosis_engine_rpc_api_bindings.StopEnclaveArgs{
-		EnclaveId: string(enclaveId),
+		EnclaveIdentifier: enclaveIdentifier,
 	}
 
 	if _, err := kurtosisCtx.client.StopEnclave(ctx, stopEnclaveArgs); err != nil {
-		return stacktrace.Propagate(err, "An error occurred stopping enclave with ID '%v'", enclaveId)
+		return stacktrace.Propagate(err, "An error occurred stopping enclave with identifier '%v'", enclaveIdentifier)
 	}
 
 	return nil
 }
 
-// Docs available at https://docs.kurtosis.com/sdk#destroyenclaveenclaveid-enclaveid
-func (kurtosisCtx *KurtosisContext) DestroyEnclave(ctx context.Context, enclaveId enclaves.EnclaveID) error {
+// Docs available at https://docs.kurtosis.com/sdk/#destroyenclavestring-enclaveidentifier
+func (kurtosisCtx *KurtosisContext) DestroyEnclave(ctx context.Context, enclaveIdentifier string) error {
 	destroyEnclaveArgs := &kurtosis_engine_rpc_api_bindings.DestroyEnclaveArgs{
-		EnclaveId: string(enclaveId),
+		EnclaveIdentifier: enclaveIdentifier,
 	}
 
 	if _, err := kurtosisCtx.client.DestroyEnclave(ctx, destroyEnclaveArgs); err != nil {
-		return stacktrace.Propagate(err, "An error occurred destroying enclave with ID '%v'", enclaveId)
+		return stacktrace.Propagate(err, "An error occurred destroying enclave with identifier '%v'", enclaveIdentifier)
 	}
 
 	return nil
@@ -174,14 +209,14 @@ func (kurtosisCtx *KurtosisContext) Clean(ctx context.Context, shouldCleanAll bo
 		return nil, stacktrace.Propagate(err, "An error occurred when trying to perform a clean with the clean-all arg set to '%v'", shouldCleanAll)
 	}
 
-	return cleanResponse.RemovedEnclaveIds, nil
+	return cleanResponse.RemovedEnclaveUuids, nil
 }
 
-// Docs available at https://docs.kurtosis.com/sdk#getservicelogsenclaveid-enclaveid-setserviceguid-serviceguids-boolean-shouldfollowlogs---servicelogsstreamcontent-servicelogsstreamcontent
+// Docs available at https://docs.kurtosis.com/sdk#getservicelogsstring-enclaveidentifier-setserviceuuid-serviceuuids-boolean-shouldfollowlogs-loglinefilter-loglinefilter---servicelogsstreamcontent-servicelogsstreamcontent
 func (kurtosisCtx *KurtosisContext) GetServiceLogs(
 	ctx context.Context,
-	enclaveID enclaves.EnclaveID,
-	userServiceGuids map[services.ServiceGUID]bool,
+	enclaveIdentifier string,
+	userServiceUuids map[services.ServiceUUID]bool,
 	shouldFollowLogs bool,
 	logLineFilter *LogLineFilter,
 ) (
@@ -202,13 +237,13 @@ func (kurtosisCtx *KurtosisContext) GetServiceLogs(
 	//this process could take much time until the next channel pull, so we could be filling the buffer during that time to not let the servers thread idled
 	serviceLogsStreamContentChan := make(chan *serviceLogsStreamContent, serviceLogsStreamContentChanBufferSize)
 
-	getServiceLogsArgs, err := newGetServiceLogsArgs(enclaveID, userServiceGuids, shouldFollowLogs, logLineFilter)
+	getServiceLogsArgs, err := newGetServiceLogsArgs(enclaveIdentifier, userServiceUuids, shouldFollowLogs, logLineFilter)
 	if err != nil {
 		return nil, nil, stacktrace.Propagate(
 			err,
-			"An error occurred creating the service logs arguments with enclave ID '%v', user service GUIDS '%+v', should follow logs value '%v' and with these conjunctive log line filters '%+v'",
-			enclaveID,
-			userServiceGuids,
+			"An error occurred creating the service logs arguments with enclave identifier '%v', user service UUID '%+v', should follow logs value '%v' and with these conjunctive log line filters '%+v'",
+			enclaveIdentifier,
+			userServiceUuids,
 			shouldFollowLogs,
 			logLineFilter,
 		)
@@ -221,8 +256,8 @@ func (kurtosisCtx *KurtosisContext) GetServiceLogs(
 
 	go runReceiveStreamLogsFromTheServerRoutine(
 		cancelCtxFunc,
-		enclaveID,
-		userServiceGuids,
+		enclaveIdentifier,
+		userServiceUuids,
 		serviceLogsStreamContentChan,
 		stream,
 	)
@@ -232,6 +267,16 @@ func (kurtosisCtx *KurtosisContext) GetServiceLogs(
 	return serviceLogsStreamContentChan, cancelCtxFunc, nil
 }
 
+// Docs available at https://docs.kurtosis.com/sdk#getexistingandhistoricalenclaveidentifiers---enclaveidentifiers-enclaveidentifiers
+func (kurtosisCtx *KurtosisContext) GetExistingAndHistoricalEnclaveIdentifiers(ctx context.Context) (*EnclaveIdentifiers, error) {
+	historicalEnclaveIdentifiers, err := kurtosisCtx.client.GetExistingAndHistoricalEnclaveIdentifiers(ctx, &emptypb.Empty{})
+	if err != nil {
+		return nil, stacktrace.Propagate(err, "An error occurred while fetching existing and historical enclave identifiers")
+	}
+
+	return newEnclaveIdentifiers(historicalEnclaveIdentifiers.AllIdentifiers), nil
+}
+
 // ====================================================================================================
 //
 //	Private helper methods
@@ -239,8 +284,8 @@ func (kurtosisCtx *KurtosisContext) GetServiceLogs(
 // ====================================================================================================
 func runReceiveStreamLogsFromTheServerRoutine(
 	cancelCtxFunc context.CancelFunc,
-	enclaveID enclaves.EnclaveID,
-	requestedServiceGuids map[services.ServiceGUID]bool,
+	enclaveIdentifier string,
+	requestedServiceUuids map[services.ServiceUUID]bool,
 	serviceLogsStreamContentChan chan *serviceLogsStreamContent,
 	stream kurtosis_engine_rpc_api_bindings.EngineService_GetServiceLogsClient,
 ) {
@@ -267,11 +312,11 @@ func runReceiveStreamLogsFromTheServerRoutine(
 				return
 			}
 			//error during stream case
-			logrus.Errorf("An error occurred receiving user service logs stream for user services '%+v' in enclave '%v'. Error:\n%v", requestedServiceGuids, enclaveID, errReceivingStream)
+			logrus.Errorf("An error occurred receiving user service logs stream for user services '%+v' in enclave '%v'. Error:\n%v", requestedServiceUuids, enclaveIdentifier, errReceivingStream)
 			return
 		}
 
-		serviceLogsStreamContentObj := newServiceLogsStreamContentFromGrpcStreamResponse(requestedServiceGuids, getServiceLogsResponse)
+		serviceLogsStreamContentObj := newServiceLogsStreamContentFromGrpcStreamResponse(requestedServiceUuids, getServiceLogsResponse)
 
 		serviceLogsStreamContentChan <- serviceLogsStreamContentObj
 	}
@@ -320,7 +365,8 @@ func newEnclaveContextFromEnclaveInfo(
 
 	result := enclaves.NewEnclaveContext(
 		apiContainerClient,
-		enclaves.EnclaveID(enclaveInfo.EnclaveId),
+		enclaves.EnclaveUUID(enclaveInfo.EnclaveUuid),
+		enclaveInfo.GetName(),
 	)
 
 	return result, nil
@@ -375,16 +421,16 @@ func validateEngineApiVersion(ctx context.Context, engineServiceClient kurtosis_
 }
 
 func newGetServiceLogsArgs(
-	enclaveID enclaves.EnclaveID,
-	userServiceGUIDs map[services.ServiceGUID]bool,
+	enclaveIdentifier string,
+	userServiceUUIDs map[services.ServiceUUID]bool,
 	shouldFollowLogs bool,
 	logLineFilter *LogLineFilter,
 ) (*kurtosis_engine_rpc_api_bindings.GetServiceLogsArgs, error) {
-	userServiceGUIDStrSet := make(map[string]bool, len(userServiceGUIDs))
+	userServiceUuuidSet := make(map[string]bool, len(userServiceUUIDs))
 
-	for userServiceGUID, isUserServiceInSet := range userServiceGUIDs {
-		userServiceGUIDStr := string(userServiceGUID)
-		userServiceGUIDStrSet[userServiceGUIDStr] = isUserServiceInSet
+	for userServiceUUID, isUserServiceInSet := range userServiceUUIDs {
+		userServiceUUIDStr := string(userServiceUUID)
+		userServiceUuuidSet[userServiceUUIDStr] = isUserServiceInSet
 	}
 
 	grpcConjunctiveFilters, err := newGRPCConjunctiveFilters(logLineFilter)
@@ -393,8 +439,8 @@ func newGetServiceLogsArgs(
 	}
 
 	getUserServiceLogsArgs := &kurtosis_engine_rpc_api_bindings.GetServiceLogsArgs{
-		EnclaveId:          string(enclaveID),
-		ServiceGuidSet:     userServiceGUIDStrSet,
+		EnclaveIdentifier:  enclaveIdentifier,
+		ServiceUuidSet:     userServiceUuuidSet,
 		FollowLogs:         shouldFollowLogs,
 		ConjunctiveFilters: grpcConjunctiveFilters,
 	}
@@ -402,8 +448,8 @@ func newGetServiceLogsArgs(
 	return getUserServiceLogsArgs, nil
 }
 
-//Even though the backend is prepared for receiving a list of conjunctive filters
-//We allow users to send only one filter so far, because it covers the current supported use cases
+// Even though the backend is prepared for receiving a list of conjunctive filters
+// We allow users to send only one filter so far, because it covers the current supported use cases
 func newGRPCConjunctiveFilters(
 	logLineFilter *LogLineFilter,
 ) ([]*kurtosis_engine_rpc_api_bindings.LogLineFilter, error) {
@@ -430,7 +476,7 @@ func newGRPCConjunctiveFilters(
 	}
 	grpcLogLineFilter := &kurtosis_engine_rpc_api_bindings.LogLineFilter{
 		TextPattern: logLineFilter.textPattern,
-		Operator: grpcOperator,
+		Operator:    grpcOperator,
 	}
 
 	grpcLogLineFilters = append(grpcLogLineFilters, grpcLogLineFilter)
@@ -439,36 +485,36 @@ func newGRPCConjunctiveFilters(
 }
 
 func newServiceLogsStreamContentFromGrpcStreamResponse(
-	requestedServiceGuids map[services.ServiceGUID]bool,
+	requestedServiceUuids map[services.ServiceUUID]bool,
 	getServiceLogResponse *kurtosis_engine_rpc_api_bindings.GetServiceLogsResponse,
 ) *serviceLogsStreamContent {
-	serviceLogsByServiceGuidMap := map[services.ServiceGUID][]*ServiceLog{}
+	serviceLogsByServiceUuidMap := map[services.ServiceUUID][]*ServiceLog{}
 
-	receivedServiceLogsByServiceGuid := getServiceLogResponse.ServiceLogsByServiceGuid
+	receivedServiceLogsByServiceUuid := getServiceLogResponse.GetServiceLogsByServiceUuid()
 
-	for serviceGuid := range requestedServiceGuids {
-		serviceGuidStr := string(serviceGuid)
+	for serviceUuid := range requestedServiceUuids {
+		serviceUuidStr := string(serviceUuid)
 		serviceLogs := []*ServiceLog{}
-		serviceLogLine, found := receivedServiceLogsByServiceGuid[serviceGuidStr]
+		serviceLogLine, found := receivedServiceLogsByServiceUuid[serviceUuidStr]
 		if found {
 			for _, logLineContent := range serviceLogLine.Line {
 				serviceLog := newServiceLog(logLineContent)
 				serviceLogs = append(serviceLogs, serviceLog)
 			}
 		}
-		serviceLogsByServiceGuidMap[serviceGuid] = serviceLogs
+		serviceLogsByServiceUuidMap[serviceUuid] = serviceLogs
 	}
 
-	notFoundServiceGuidSet := getServiceLogResponse.NotFoundServiceGuidSet
+	notFoundServiceUuidSet := getServiceLogResponse.NotFoundServiceUuidSet
 
-	notFoundServiceGuids := make(map[services.ServiceGUID]bool, len(notFoundServiceGuidSet))
+	notFoundServiceUuids := make(map[services.ServiceUUID]bool, len(notFoundServiceUuidSet))
 
-	for notFoundServiceGuidStr := range notFoundServiceGuidSet {
-		notFoundServiceGuid := services.ServiceGUID(notFoundServiceGuidStr)
-		notFoundServiceGuids[notFoundServiceGuid] = true
+	for notFoundServiceUuidStr := range notFoundServiceUuidSet {
+		notFoundServiceUuid := services.ServiceUUID(notFoundServiceUuidStr)
+		notFoundServiceUuids[notFoundServiceUuid] = true
 	}
 
-	newServiceLogsStreamContentObj := newServiceLogsStreamContent(serviceLogsByServiceGuidMap, notFoundServiceGuids)
+	newServiceLogsStreamContentObj := newServiceLogsStreamContent(serviceLogsByServiceUuidMap, notFoundServiceUuids)
 
 	return newServiceLogsStreamContentObj
 }

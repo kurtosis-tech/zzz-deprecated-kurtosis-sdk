@@ -23,8 +23,8 @@ export namespace GetEngineInfoResponse {
 }
 
 export class CreateEnclaveArgs extends jspb.Message {
-  getEnclaveId(): string;
-  setEnclaveId(value: string): CreateEnclaveArgs;
+  getEnclaveName(): string;
+  setEnclaveName(value: string): CreateEnclaveArgs;
 
   getApiContainerVersionTag(): string;
   setApiContainerVersionTag(value: string): CreateEnclaveArgs;
@@ -45,7 +45,7 @@ export class CreateEnclaveArgs extends jspb.Message {
 
 export namespace CreateEnclaveArgs {
   export type AsObject = {
-    enclaveId: string,
+    enclaveName: string,
     apiContainerVersionTag: string,
     apiContainerLogLevel: string,
     isPartitioningEnabled: boolean,
@@ -129,8 +129,14 @@ export namespace EnclaveAPIContainerHostMachineInfo {
 }
 
 export class EnclaveInfo extends jspb.Message {
-  getEnclaveId(): string;
-  setEnclaveId(value: string): EnclaveInfo;
+  getEnclaveUuid(): string;
+  setEnclaveUuid(value: string): EnclaveInfo;
+
+  getName(): string;
+  setName(value: string): EnclaveInfo;
+
+  getShortenedUuid(): string;
+  setShortenedUuid(value: string): EnclaveInfo;
 
   getContainersStatus(): EnclaveContainersStatus;
   setContainersStatus(value: EnclaveContainersStatus): EnclaveInfo;
@@ -163,7 +169,9 @@ export class EnclaveInfo extends jspb.Message {
 
 export namespace EnclaveInfo {
   export type AsObject = {
-    enclaveId: string,
+    enclaveUuid: string,
+    name: string,
+    shortenedUuid: string,
     containersStatus: EnclaveContainersStatus,
     apiContainerStatus: EnclaveAPIContainerStatus,
     apiContainerInfo?: EnclaveAPIContainerInfo.AsObject,
@@ -190,9 +198,55 @@ export namespace GetEnclavesResponse {
   }
 }
 
+export class EnclaveIdentifiers extends jspb.Message {
+  getEnclaveUuid(): string;
+  setEnclaveUuid(value: string): EnclaveIdentifiers;
+
+  getName(): string;
+  setName(value: string): EnclaveIdentifiers;
+
+  getShortenedUuid(): string;
+  setShortenedUuid(value: string): EnclaveIdentifiers;
+
+  serializeBinary(): Uint8Array;
+  toObject(includeInstance?: boolean): EnclaveIdentifiers.AsObject;
+  static toObject(includeInstance: boolean, msg: EnclaveIdentifiers): EnclaveIdentifiers.AsObject;
+  static serializeBinaryToWriter(message: EnclaveIdentifiers, writer: jspb.BinaryWriter): void;
+  static deserializeBinary(bytes: Uint8Array): EnclaveIdentifiers;
+  static deserializeBinaryFromReader(message: EnclaveIdentifiers, reader: jspb.BinaryReader): EnclaveIdentifiers;
+}
+
+export namespace EnclaveIdentifiers {
+  export type AsObject = {
+    enclaveUuid: string,
+    name: string,
+    shortenedUuid: string,
+  }
+}
+
+export class GetExistingAndHistoricalEnclaveIdentifiersResponse extends jspb.Message {
+  getAllidentifiersList(): Array<EnclaveIdentifiers>;
+  setAllidentifiersList(value: Array<EnclaveIdentifiers>): GetExistingAndHistoricalEnclaveIdentifiersResponse;
+  clearAllidentifiersList(): GetExistingAndHistoricalEnclaveIdentifiersResponse;
+  addAllidentifiers(value?: EnclaveIdentifiers, index?: number): EnclaveIdentifiers;
+
+  serializeBinary(): Uint8Array;
+  toObject(includeInstance?: boolean): GetExistingAndHistoricalEnclaveIdentifiersResponse.AsObject;
+  static toObject(includeInstance: boolean, msg: GetExistingAndHistoricalEnclaveIdentifiersResponse): GetExistingAndHistoricalEnclaveIdentifiersResponse.AsObject;
+  static serializeBinaryToWriter(message: GetExistingAndHistoricalEnclaveIdentifiersResponse, writer: jspb.BinaryWriter): void;
+  static deserializeBinary(bytes: Uint8Array): GetExistingAndHistoricalEnclaveIdentifiersResponse;
+  static deserializeBinaryFromReader(message: GetExistingAndHistoricalEnclaveIdentifiersResponse, reader: jspb.BinaryReader): GetExistingAndHistoricalEnclaveIdentifiersResponse;
+}
+
+export namespace GetExistingAndHistoricalEnclaveIdentifiersResponse {
+  export type AsObject = {
+    allidentifiersList: Array<EnclaveIdentifiers.AsObject>,
+  }
+}
+
 export class StopEnclaveArgs extends jspb.Message {
-  getEnclaveId(): string;
-  setEnclaveId(value: string): StopEnclaveArgs;
+  getEnclaveIdentifier(): string;
+  setEnclaveIdentifier(value: string): StopEnclaveArgs;
 
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): StopEnclaveArgs.AsObject;
@@ -204,13 +258,13 @@ export class StopEnclaveArgs extends jspb.Message {
 
 export namespace StopEnclaveArgs {
   export type AsObject = {
-    enclaveId: string,
+    enclaveIdentifier: string,
   }
 }
 
 export class DestroyEnclaveArgs extends jspb.Message {
-  getEnclaveId(): string;
-  setEnclaveId(value: string): DestroyEnclaveArgs;
+  getEnclaveIdentifier(): string;
+  setEnclaveIdentifier(value: string): DestroyEnclaveArgs;
 
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): DestroyEnclaveArgs.AsObject;
@@ -222,7 +276,7 @@ export class DestroyEnclaveArgs extends jspb.Message {
 
 export namespace DestroyEnclaveArgs {
   export type AsObject = {
-    enclaveId: string,
+    enclaveIdentifier: string,
   }
 }
 
@@ -245,8 +299,8 @@ export namespace CleanArgs {
 }
 
 export class CleanResponse extends jspb.Message {
-  getRemovedEnclaveIdsMap(): jspb.Map<string, boolean>;
-  clearRemovedEnclaveIdsMap(): CleanResponse;
+  getRemovedEnclaveUuidsMap(): jspb.Map<string, boolean>;
+  clearRemovedEnclaveUuidsMap(): CleanResponse;
 
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): CleanResponse.AsObject;
@@ -258,16 +312,16 @@ export class CleanResponse extends jspb.Message {
 
 export namespace CleanResponse {
   export type AsObject = {
-    removedEnclaveIdsMap: Array<[string, boolean]>,
+    removedEnclaveUuidsMap: Array<[string, boolean]>,
   }
 }
 
 export class GetServiceLogsArgs extends jspb.Message {
-  getEnclaveId(): string;
-  setEnclaveId(value: string): GetServiceLogsArgs;
+  getEnclaveIdentifier(): string;
+  setEnclaveIdentifier(value: string): GetServiceLogsArgs;
 
-  getServiceGuidSetMap(): jspb.Map<string, boolean>;
-  clearServiceGuidSetMap(): GetServiceLogsArgs;
+  getServiceUuidSetMap(): jspb.Map<string, boolean>;
+  clearServiceUuidSetMap(): GetServiceLogsArgs;
 
   getFollowLogs(): boolean;
   setFollowLogs(value: boolean): GetServiceLogsArgs;
@@ -287,19 +341,19 @@ export class GetServiceLogsArgs extends jspb.Message {
 
 export namespace GetServiceLogsArgs {
   export type AsObject = {
-    enclaveId: string,
-    serviceGuidSetMap: Array<[string, boolean]>,
+    enclaveIdentifier: string,
+    serviceUuidSetMap: Array<[string, boolean]>,
     followLogs: boolean,
     conjunctiveFiltersList: Array<LogLineFilter.AsObject>,
   }
 }
 
 export class GetServiceLogsResponse extends jspb.Message {
-  getServiceLogsByServiceGuidMap(): jspb.Map<string, LogLine>;
-  clearServiceLogsByServiceGuidMap(): GetServiceLogsResponse;
+  getServiceLogsByServiceUuidMap(): jspb.Map<string, LogLine>;
+  clearServiceLogsByServiceUuidMap(): GetServiceLogsResponse;
 
-  getNotFoundServiceGuidSetMap(): jspb.Map<string, boolean>;
-  clearNotFoundServiceGuidSetMap(): GetServiceLogsResponse;
+  getNotFoundServiceUuidSetMap(): jspb.Map<string, boolean>;
+  clearNotFoundServiceUuidSetMap(): GetServiceLogsResponse;
 
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): GetServiceLogsResponse.AsObject;
@@ -311,8 +365,8 @@ export class GetServiceLogsResponse extends jspb.Message {
 
 export namespace GetServiceLogsResponse {
   export type AsObject = {
-    serviceLogsByServiceGuidMap: Array<[string, LogLine.AsObject]>,
-    notFoundServiceGuidSetMap: Array<[string, boolean]>,
+    serviceLogsByServiceUuidMap: Array<[string, LogLine.AsObject]>,
+    notFoundServiceUuidSetMap: Array<[string, boolean]>,
   }
 }
 

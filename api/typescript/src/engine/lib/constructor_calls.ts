@@ -8,7 +8,7 @@ import {
     StopEnclaveArgs,
 } from "../kurtosis_engine_rpc_api_bindings/engine_service_pb";
 import * as jspb from "google-protobuf";
-import {ServiceGUID} from "../../core/lib/services/service";
+import {ServiceUUID} from "../../core/lib/services/service";
 import * as kurtosisCtx from "./kurtosis_context/log_line_filter";
 import * as kurtosisLogLineOperator from "./kurtosis_context/log_line_operator";
 import {err, ok, Result} from "neverthrow";
@@ -17,12 +17,12 @@ import {err, ok, Result} from "neverthrow";
 //                                    Kurtosis Context
 // ====================================================================================================
 export function newCreateEnclaveArgs(
-        enclaveId: string,
+        enclaveName: string,
         apiContainerImageVersionTag: string,
         apiContainerLogLevel: string,
         isPartitioningEnabled: boolean): CreateEnclaveArgs {
     const result: CreateEnclaveArgs = new CreateEnclaveArgs();
-    result.setEnclaveId(enclaveId);
+    result.setEnclaveName(enclaveName);
     result.setApiContainerVersionTag(apiContainerImageVersionTag);
     result.setApiContainerLogLevel(apiContainerLogLevel);
     result.setIsPartitioningEnabled(isPartitioningEnabled);
@@ -30,15 +30,15 @@ export function newCreateEnclaveArgs(
     return result;
 }
 
-export function newStopEnclaveArgs(enclaveId:string): DestroyEnclaveArgs {
+export function newStopEnclaveArgs(enclaveIdentifier:string): DestroyEnclaveArgs {
     const result: StopEnclaveArgs = new StopEnclaveArgs();
-    result.setEnclaveId(enclaveId);
+    result.setEnclaveIdentifier(enclaveIdentifier);
     return result;
 }
 
-export function newDestroyEnclaveArgs(enclaveId:string): DestroyEnclaveArgs {
+export function newDestroyEnclaveArgs(enclaveIdentifier:string): DestroyEnclaveArgs {
     const result: DestroyEnclaveArgs = new DestroyEnclaveArgs();
-    result.setEnclaveId(enclaveId);
+    result.setEnclaveIdentifier(enclaveIdentifier);
     return result;
 }
 
@@ -49,18 +49,18 @@ export function newCleanArgs(shouldCleanAll:boolean): CleanArgs {
 }
 
 export function newGetServiceLogsArgs(
-        enclaveID: string,
-        serviceGUIDs: Set<ServiceGUID>,
+        enclaveIdentifier: string,
+        serviceUuids: Set<ServiceUUID>,
         shouldFollowLogs: boolean,
         logLineFilter: kurtosisCtx.LogLineFilter|undefined,
 ): GetServiceLogsArgs {
 
     const result: GetServiceLogsArgs = new GetServiceLogsArgs();
-    result.setEnclaveId(enclaveID);
-    const serviceGUIDSetMap: jspb.Map<string, boolean> = result.getServiceGuidSetMap();
-    const isServiceGUIDInSet: boolean = true;
-    for (const serviceGUID of serviceGUIDs) {
-        serviceGUIDSetMap.set(serviceGUID, isServiceGUIDInSet);
+    result.setEnclaveIdentifier(enclaveIdentifier);
+    const serviceUuidMapSet: jspb.Map<string, boolean> = result.getServiceUuidSetMap();
+    const isServiceUuidInSet: boolean = true;
+    for (const serviceUUID of serviceUuids) {
+        serviceUuidMapSet.set(serviceUUID, isServiceUuidInSet);
     }
     result.setFollowLogs(shouldFollowLogs)
 
