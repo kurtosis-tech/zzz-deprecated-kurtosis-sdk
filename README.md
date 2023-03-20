@@ -1,3 +1,9 @@
+## Deprecation Notice
+
+Use the SDK in the [monorepo](https://github.com/kurtosis-tech/kurtosis/tree/main/api) instead.
+
+---
+
 Kurtosis SDK
 =====================
 This repository contains the Protobuf definitions of the API the Kurtosis engine accepts, as well as libraries in [multiple languages](./api/supported-languages.txt) for interacting with the API.
